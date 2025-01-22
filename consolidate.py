@@ -65,105 +65,82 @@ def consolidar_archivos(directorio):
     df_unificado = df_unificado.dropna(subset=columnas_requeridas, how='all')
     return df_unificado
 
-# Función para insertar tablas dinámicas
+from openpyxl import load_workbook
+from openpyxl.utils import get_column_letter
+
 def insertar_tablas_dinamicas(ruta_archivo):
-    # Abrir el archivo Excel con xlwings
-    app = xw.App(visible=False)  # Cambiar a True si deseas observar el proceso
-    wb = xw.Book(ruta_archivo)
+    """
+    Crea una hoja con los datos resumidos que servirán como base para crear tablas dinámicas en Excel.
 
+    Args:
+        ruta_archivo (str): Ruta del archivo Excel en el que se añadirán los datos base.
+    """
     try:
-        # Verificar si la hoja "TD" existe, si no, crearla
-        if "TD" in [sheet.name for sheet in wb.sheets]:
-            ws_td = wb.sheets["TD"]
-            ws_td.clear()  # Limpiar contenido existente
-        else:
-            ws_td = wb.sheets.add("TD", after=wb.sheets[-1])  # Crear hoja para tablas dinámicas
+        # Cargar el archivo Excel
+        wb = load_workbook(ruta_archivo)
 
-        # Obtener la hoja de datos
-        ws_datos = wb.sheets[0]  # Cambia el índice si necesitas otra hoja
+        # Crear o limpiar la hoja "TD"
+        if "TD" in wb.sheetnames:
+            ws_td = wb["TD"]
+            wb.remove(ws_td)
+        ws_td = wb.create_sheet("TD")
 
-        # Seleccionar rango de datos
-        rango_datos = ws_datos.range("A1").expand("table")  # Expandir rango con datos
-        source_data = f"'{ws_datos.name}'!{rango_datos.address}"  # Convertir a rango absoluto
+        # Cargar datos de la primera hoja
+        ws_data = wb[wb.sheetnames[0]]  # Supone que los datos están en la primera hoja
 
-        # Crear PivotCache para la primera tabla dinámica
-        pivot_cache1 = wb.api.PivotCaches().Create(
-            SourceType=1,  # xlDatabase
-            SourceData=source_data
-        )
+        # Crear resumen para la tabla dinámica
+        ws_td.append(["TALLER Y/O CURSO", "TIPO", "Recuento de IDENTIFICACIÓN", "Fecha Apertura Min", "Fecha Cierre Max"])
+        resumen = {}
 
-        # ====================
-        # Primera tabla dinámica
-        # ====================
-        tabla_dinamica1_rango = ws_td.range("A3").address
-        tabla_dinamica1 = pivot_cache1.CreatePivotTable(
-            TableDestination=ws_td.range("A3").api,
-            TableName="TablaDinamica1"
-        )
+        for row in ws_data.iter_rows(min_row=2, values_only=True):  # Saltar encabezado
+            curso = row[0]  # Suponiendo que "TALLER Y/O CURSO" está en la primera columna
+            tipo = row[1]  # Suponiendo que "TIPO" está en la segunda columna
+            identificacion = row[2]  # Suponiendo que "NUMERO DE IDENTIFICACIÓN" está en la tercera columna
+            fecha_apertura = row[3]  # Suponiendo que "FECHA DE APERTURA" está en la cuarta columna
+            fecha_cierre = row[4]  # Suponiendo que "FECHA DE CIERRE" está en la quinta columna
 
-        # Configurar la primera tabla dinámica
-        tabla_dinamica1.PivotFields("TALLER Y/O CURSO ").Orientation = 1  # xlRowField
-        tabla_dinamica1.PivotFields("TALLER Y/O CURSO ").Position = 1
-        tabla_dinamica1.PivotFields("TIPO").Orientation = 2  # xlColumnField
-        tabla_dinamica1.PivotFields("TIPO").Position = 1
+            if (curso, tipo) not in resumen:
+                resumen[(curso, tipo)] = {
+                    "count": 0,
+                    "fecha_apertura_min": fecha_apertura,
+                    "fecha_cierre_max": fecha_cierre,
+                }
 
-        # Agregar el campo de datos con formato sin decimales
-        data_field = tabla_dinamica1.AddDataField(
-            tabla_dinamica1.PivotFields("NUMERO DE IDENTIFICACIÓN"),
-            "Recuento de IDENTIFICACIÓN",
-            -4112  # xlCount
-        )
-        data_field.NumberFormat = "#,##0"  # Sin decimales
+            resumen[(curso, tipo)]["count"] += 1
+            if fecha_apertura and (resumen[(curso, tipo)]["fecha_apertura_min"] is None or fecha_apertura < resumen[(curso, tipo)]["fecha_apertura_min"]):
+                resumen[(curso, tipo)]["fecha_apertura_min"] = fecha_apertura
+            if fecha_cierre and (resumen[(curso, tipo)]["fecha_cierre_max"] is None or fecha_cierre > resumen[(curso, tipo)]["fecha_cierre_max"]):
+                resumen[(curso, tipo)]["fecha_cierre_max"] = fecha_cierre
 
-        # ====================
-        # Segunda tabla dinámica
-        # ====================
-        # Crear PivotCache para la segunda tabla dinámica
-        pivot_cache2 = wb.api.PivotCaches().Create(
-            SourceType=1,  # xlDatabase
-            SourceData=source_data
-        )
+        # Escribir resumen en la hoja "TD"
+        for (curso, tipo), values in resumen.items():
+            ws_td.append([
+                curso, 
+                tipo, 
+                values["count"], 
+                values["fecha_apertura_min"], 
+                values["fecha_cierre_max"]
+            ])
 
-        # Ubicación de la segunda tabla dinámica (debajo de la primera)
-        tabla_dinamica2_rango = ws_td.range(f"A{ws_td.range('A3').end('down').row + 6}").address
-        tabla_dinamica2 = pivot_cache2.CreatePivotTable(
-            TableDestination=ws_td.range(tabla_dinamica2_rango).api,
-            TableName="TablaDinamica2"
-        )
-
-        # Configurar la segunda tabla dinámica
-        tabla_dinamica2.PivotFields("TALLER Y/O CURSO ").Orientation = 1  # xlRowField
-        tabla_dinamica2.PivotFields("TALLER Y/O CURSO ").Position = 1
-
-        # Configurar FECHA DE APERTURA como un campo de valores con el mínimo
-        tabla_dinamica2.AddDataField(
-            tabla_dinamica2.PivotFields("FECHA DE APERTURA"),
-            "Mín. de FECHA DE APERTURA",
-            -4136  # xlMin
-        ).NumberFormat = "dd/mm/yyyy"
-
-        # Configurar FECHA DE CIERRE como un campo de valores con el máximo
-        tabla_dinamica2.AddDataField(
-            tabla_dinamica2.PivotFields("FECHA DE CIERRE "),
-            "Máx. de FECHA DE CIERRE",
-            -4139  # xlMax
-        ).NumberFormat = "dd/mm/yyyy"
-
-        # Desactivar subtotales
-        tabla_dinamica2.RowAxisLayout(2)  # xlTabularRow
-        tabla_dinamica2.PivotFields("TALLER Y/O CURSO ").Subtotals = [False] * 12
+        # Ajustar ancho de columnas
+        for col in ws_td.columns:
+            max_length = 0
+            col_letter = get_column_letter(col[0].column)
+            for cell in col:
+                try:
+                    if cell.value:
+                        max_length = max(max_length, len(str(cell.value)))
+                except:
+                    pass
+            ws_td.column_dimensions[col_letter].width = max_length + 2
 
         # Guardar los cambios
-        wb.save()
-        print("Tablas dinámicas creadas exitosamente.")
-    
+        wb.save(ruta_archivo)
+        print("Tablas dinámicas base creadas exitosamente.")
+
     except Exception as e:
-        print(f"Error al crear tablas dinámicas: {e}")
-    
-    finally:
-        # Cerrar el archivo y la aplicación
-        wb.close()
-        app.quit()
+        print(f"Error al crear tablas dinámicas base: {e}")
+
 
 
 # Interfaz Streamlit
