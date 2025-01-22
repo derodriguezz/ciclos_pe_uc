@@ -1,5 +1,5 @@
-streamlit==1.25.0
-pandas==2.1.1
-xlwings==0.30.9
-openpyxl==3.1.2
-pathlib==1.0.1
+streamlit
+pandas
+xlwings
+openpyxl
+pathlib
