@@ -4,7 +4,8 @@ import os
 from pathlib import Path
 import email
 from email.policy import default
-import xlwings as xw
+import pyperclip
+
 
 # Función para guardar adjuntos de correos
 def guardar_adjuntos_eml(uploaded_files, carpeta_salida):
@@ -65,84 +66,6 @@ def consolidar_archivos(directorio):
     df_unificado = df_unificado.dropna(subset=columnas_requeridas, how='all')
     return df_unificado
 
-from openpyxl import load_workbook
-from openpyxl.utils import get_column_letter
-
-def insertar_tablas_dinamicas(ruta_archivo):
-    """
-    Crea una hoja con los datos resumidos que servirán como base para crear tablas dinámicas en Excel.
-
-    Args:
-        ruta_archivo (str): Ruta del archivo Excel en el que se añadirán los datos base.
-    """
-    try:
-        # Cargar el archivo Excel
-        wb = load_workbook(ruta_archivo)
-
-        # Crear o limpiar la hoja "TD"
-        if "TD" in wb.sheetnames:
-            ws_td = wb["TD"]
-            wb.remove(ws_td)
-        ws_td = wb.create_sheet("TD")
-
-        # Cargar datos de la primera hoja
-        ws_data = wb[wb.sheetnames[0]]  # Supone que los datos están en la primera hoja
-
-        # Crear resumen para la tabla dinámica
-        ws_td.append(["TALLER Y/O CURSO", "TIPO", "Recuento de IDENTIFICACIÓN", "Fecha Apertura Min", "Fecha Cierre Max"])
-        resumen = {}
-
-        for row in ws_data.iter_rows(min_row=2, values_only=True):  # Saltar encabezado
-            curso = row[0]  # Suponiendo que "TALLER Y/O CURSO" está en la primera columna
-            tipo = row[1]  # Suponiendo que "TIPO" está en la segunda columna
-            identificacion = row[2]  # Suponiendo que "NUMERO DE IDENTIFICACIÓN" está en la tercera columna
-            fecha_apertura = row[3]  # Suponiendo que "FECHA DE APERTURA" está en la cuarta columna
-            fecha_cierre = row[4]  # Suponiendo que "FECHA DE CIERRE" está en la quinta columna
-
-            if (curso, tipo) not in resumen:
-                resumen[(curso, tipo)] = {
-                    "count": 0,
-                    "fecha_apertura_min": fecha_apertura,
-                    "fecha_cierre_max": fecha_cierre,
-                }
-
-            resumen[(curso, tipo)]["count"] += 1
-            if fecha_apertura and (resumen[(curso, tipo)]["fecha_apertura_min"] is None or fecha_apertura < resumen[(curso, tipo)]["fecha_apertura_min"]):
-                resumen[(curso, tipo)]["fecha_apertura_min"] = fecha_apertura
-            if fecha_cierre and (resumen[(curso, tipo)]["fecha_cierre_max"] is None or fecha_cierre > resumen[(curso, tipo)]["fecha_cierre_max"]):
-                resumen[(curso, tipo)]["fecha_cierre_max"] = fecha_cierre
-
-        # Escribir resumen en la hoja "TD"
-        for (curso, tipo), values in resumen.items():
-            ws_td.append([
-                curso, 
-                tipo, 
-                values["count"], 
-                values["fecha_apertura_min"], 
-                values["fecha_cierre_max"]
-            ])
-
-        # Ajustar ancho de columnas
-        for col in ws_td.columns:
-            max_length = 0
-            col_letter = get_column_letter(col[0].column)
-            for cell in col:
-                try:
-                    if cell.value:
-                        max_length = max(max_length, len(str(cell.value)))
-                except:
-                    pass
-            ws_td.column_dimensions[col_letter].width = max_length + 2
-
-        # Guardar los cambios
-        wb.save(ruta_archivo)
-        print("Tablas dinámicas base creadas exitosamente.")
-
-    except Exception as e:
-        print(f"Error al crear tablas dinámicas base: {e}")
-
-
-
 # Interfaz Streamlit
 st.title("ETL de Consolidación de Ciclos")
 
@@ -157,7 +80,6 @@ with st.expander("Acerca de esta herramienta"):
     ### ¿Qué hace esta herramienta?
     - Extrae y procesa automáticamente archivos adjuntos de correos en formato `.eml`.
     - Consolida múltiples archivos de Excel en un único archivo organizado.
-    - Genera tablas dinámicas en el archivo consolidado.
     - Comprime los archivos individuales en un archivo ZIP para su descarga.
 
     ### Instrucciones:
@@ -165,14 +87,136 @@ with st.expander("Acerca de esta herramienta"):
     2. **Número de ciclo:** Ingresa el número que identificará el archivo consolidado.
     3. **Procesa:** Haz clic en **"Procesar archivos"** para ejecutar el flujo.
     4. **Descarga:** 
-        - El archivo consolidado con tablas dinámicas.
+        - El archivo consolidado.
         - Un archivo ZIP con los archivos individuales.
+    5. **Copia la macro:** Utiliza la macro de Excel que se encuentra en el botón desplegable.
+    6. **Pega y ejecuta la macro:** Utiliza la macro en el archivo de excel para generar las tablas dinámicas rápidamente. 
 
     ### Al utilizar esta herramienta recuerda:
     - Asegúrate de que tus correos `.eml` contengan archivos de Excel como adjuntos.
     - El archivo comprimido debe tener únicamente los archivos de Excel remitidos por la Agencia de Empleo.
     - Los resultados estarán disponibles hasta que cierres la aplicación.
     """)
+
+    # Mostrar instrucciones y botón para copiar la macro
+with st.expander("Instrucciones para usar la macro en Excel"):
+    st.markdown("""
+    ### Pasos para usar la macro:
+    1. Haz clic en el botón **"Copiar Macro"** para copiar el código al portapapeles.
+    2. Abre tu archivo consolidado en Excel.
+    3. Presiona `Alt + F11` para abrir el editor de Visual Basic.
+    4. En el menú, selecciona **Insertar > Módulo**.
+    5. Pega el código en el módulo que se abrió.
+    6. Desde el editor de Visual Basic, presiona `F5` o selecciona **Ejecutar > Ejecutar Sub/UserForm** para ejecutar el módulo.
+    7. Guarda el archivo como un libro estándar de Excel (**.xlsx**), sin habilitar macros.
+
+    **Nota:** 
+    - No es necesario habilitar macros en Excel para este flujo.
+    - Al guardar el archivo, elije 'Si' para guardarlo como libro sin macros.
+                
+    """)
+
+    # Código de la macro
+    macro = """
+Sub CrearTablasDinamicas()
+    Dim wsDatos As Worksheet
+    Dim wsTD As Worksheet
+    Dim pc As PivotCache
+    Dim pt1 As PivotTable
+    Dim pt2 As PivotTable
+    Dim ultimaFila As Long
+    Dim ultimaColumna As Long
+    Dim rangoFuente As Range
+
+    ' Intentar asignar la hoja de datos
+    On Error Resume Next
+    Set wsDatos = ThisWorkbook.Sheets("Sheet1") ' Cambiar "Sheet1" si tu hoja tiene otro nombre
+    On Error GoTo 0
+    If wsDatos Is Nothing Then
+        MsgBox "No se encontró la hoja llamada 'Sheet1'. Verifica el nombre y vuelve a intentar.", vbCritical
+        Exit Sub
+    End If
+
+    ' Configurar la hoja de resultados "TD"
+    On Error Resume Next
+    Set wsTD = ThisWorkbook.Sheets("TD")
+    If wsTD Is Nothing Then
+        Set wsTD = ThisWorkbook.Sheets.Add(After:=ThisWorkbook.Sheets(ThisWorkbook.Sheets.Count))
+        wsTD.Name = "TD" ' Crear hoja "TD" si no existe
+    Else
+        wsTD.Cells.Clear ' Limpiar contenido si ya existe
+    End If
+    On Error GoTo 0
+
+    ' Verificar rango de datos
+    ultimaFila = wsDatos.Cells(wsDatos.Rows.Count, 1).End(xlUp).Row
+    ultimaColumna = wsDatos.Cells(1, wsDatos.Columns.Count).End(xlToLeft).Column
+    If ultimaFila < 2 Or ultimaColumna < 2 Then
+        MsgBox "La hoja de datos está vacía o no tiene un formato válido.", vbCritical
+        Exit Sub
+    End If
+    Set rangoFuente = wsDatos.Range(wsDatos.Cells(1, 1), wsDatos.Cells(ultimaFila, ultimaColumna))
+
+    ' Crear PivotCache
+    On Error Resume Next
+    Set pc = ThisWorkbook.PivotCaches.Create(SourceType:=xlDatabase, SourceData:=rangoFuente.Address(True, True, xlR1C1, True))
+    If pc Is Nothing Then
+        MsgBox "No se pudo crear el PivotCache. Verifica que los datos sean válidos.", vbCritical
+        Exit Sub
+    End If
+    On Error GoTo 0
+
+    ' ====================
+    ' Primera tabla dinámica
+    ' ====================
+    On Error Resume Next
+    Set pt1 = wsTD.PivotTables.Add(PivotCache:=pc, TableDestination:=wsTD.Cells(3, 1), TableName:="TablaDinamica1")
+    On Error GoTo 0
+    If pt1 Is Nothing Then
+        MsgBox "Error al crear la primera tabla dinámica. Verifica los datos.", vbCritical
+        Exit Sub
+    End If
+
+    With pt1
+        .PivotFields("TALLER Y/O CURSO ").Orientation = xlRowField
+        .PivotFields("TALLER Y/O CURSO ").Position = 1
+        .PivotFields("TIPO").Orientation = xlColumnField
+        .PivotFields("TIPO").Position = 1
+        .AddDataField .PivotFields("NUMERO DE IDENTIFICACIÓN"), "Recuento de IDENTIFICACIÓN", xlCount
+        .DataBodyRange.NumberFormat = "#,##0"
+    End With
+
+    ' ====================
+    ' Segunda tabla dinámica
+    ' ====================
+    On Error Resume Next
+    Set pt2 = wsTD.PivotTables.Add(PivotCache:=pc, TableDestination:=wsTD.Cells(pt1.TableRange2.Row + pt1.TableRange2.Rows.Count + 6, 1), TableName:="TablaDinamica2")
+    On Error GoTo 0
+    If pt2 Is Nothing Then
+        MsgBox "Error al crear la segunda tabla dinámica. Verifica los datos.", vbCritical
+        Exit Sub
+    End If
+
+    With pt2
+        .PivotFields("TALLER Y/O CURSO ").Orientation = xlRowField
+        .PivotFields("TALLER Y/O CURSO ").Position = 1
+        .AddDataField .PivotFields("FECHA DE APERTURA"), "Mín. de FECHA DE APERTURA", xlMin
+        .AddDataField .PivotFields("FECHA DE CIERRE "), "Máx. de FECHA DE CIERRE", xlMax
+        .PivotFields("TALLER Y/O CURSO ").Subtotals(1) = False
+        .DataBodyRange.NumberFormat = "dd/mm/yyyy"
+    End With
+
+    MsgBox "Tablas dinámicas creadas exitosamente.", vbInformation
+End Sub
+
+
+
+    """
+
+    # Botón para copiar la macro
+    if st.button("Copiar Macro"):
+        pyperclip.copy(macro)
+        st.success("¡Código de la macro copiado al portapapeles!")
 
 # Subir archivos
 st.header("Subir correos .eml o archivos comprimidos")
@@ -184,10 +228,6 @@ temp_dir.mkdir(exist_ok=True)
 
 # Entrada de usuario para el número de ciclo
 numero_ciclo = st.text_input("Número de ciclo para guardar el archivo consolidado:", value="---")
-
-# Carpeta temporal para procesar datos
-temp_dir = Path("temp")
-temp_dir.mkdir(exist_ok=True)
 
 # Función para comprimir archivos individuales en un ZIP
 def crear_zip(carpeta, archivo_zip):
@@ -206,7 +246,6 @@ def crear_zip(carpeta, archivo_zip):
                 zf.write(os.path.join(carpeta, archivo), archivo)
 
 
-
 # Procesar datos
 if st.button("Procesar archivos"):
     if uploaded_files:
@@ -222,10 +261,6 @@ if st.button("Procesar archivos"):
             archivo_salida = temp_dir / f"Consolidado_Ciclo_{numero_ciclo}.xlsx"
             df_consolidado.to_excel(archivo_salida, index=False)
             st.success("Archivo consolidado generado correctamente.")
-
-            # Insertar tablas dinámicas en el archivo consolidado
-            insertar_tablas_dinamicas(archivo_salida)
-            st.success("Tablas dinámicas insertadas correctamente.")
 
             # Crear un archivo ZIP con los Excel individuales
             archivo_zip = temp_dir / f"Archivos_Individuales_Ciclo_{numero_ciclo}.zip"
