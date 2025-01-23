@@ -4,4 +4,3 @@ xlwings
 openpyxl
 pathlib
 pyperclip
-shutil
