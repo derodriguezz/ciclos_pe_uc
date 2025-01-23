@@ -5,6 +5,7 @@ from pathlib import Path
 import email
 from email.policy import default
 import pyperclip
+import shutil
 
 
 # Función para guardar adjuntos de correos
@@ -249,6 +250,11 @@ def crear_zip(carpeta, archivo_zip):
 
 # Procesar datos
 if st.button("Procesar archivos"):
+        # Limpiar carpeta temporal
+    if temp_dir.exists():
+        shutil.rmtree(temp_dir)
+    temp_dir.mkdir(exist_ok=True)
+    
     if uploaded_files:
         try:
             # Crear carpeta para guardar los archivos extraídos
