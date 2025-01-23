@@ -95,7 +95,7 @@ with st.expander("Acerca de esta herramienta"):
 
     ### Al utilizar esta herramienta recuerda:
     - Asegúrate de que tus correos `.eml` contengan archivos de Excel como adjuntos.
-    - El archivo comprimido debe tener únicamente los archivos de Excel remitidos por la Agencia de Empleo.
+    - El archivo comprimido debe tener únicamente los correos con archivos de Excel remitidos por la Agencia de Empleo.
     - Los resultados estarán disponibles hasta que cierres la aplicación.
     """)
 
