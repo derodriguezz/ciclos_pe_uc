@@ -213,10 +213,11 @@ End Sub
 
     """
 
-    # Botón para copiar la macro
-    if st.button("Copiar Macro"):
-        pyperclip.copy(macro)
-        st.success("¡Código de la macro copiado al portapapeles!")
+# Expander independiente para el código
+with st.expander("Ver código de la macro"):
+    st.code(macro, language='vb')
+
+
 
 # Subir archivos
 st.header("Subir correos .eml o archivos comprimidos")
